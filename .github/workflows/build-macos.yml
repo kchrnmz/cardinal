@@ -1,0 +1,53 @@
+name: Build macOS app
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - '**'
+
+concurrency:
+  group: build-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Cardinal (Apple Silicon)
+    runs-on: macos-15
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: cardinal/package-lock.json
+
+      # Installs the toolchain pinned in rust-toolchain.toml (with its components).
+      - name: Install Rust toolchain
+        run: rustup toolchain install
+
+      - name: Cache cargo build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: cardinal/src-tauri
+
+      - name: Install frontend dependencies
+        working-directory: cardinal
+        run: npm ci
+
+      - name: Build app bundle
+        working-directory: cardinal
+        run: npm run tauri build
+
+      # Only the DMG is uploaded: zipped .app folders lose their executable bits.
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cardinal-macos-arm64
+          path: cardinal/src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: error
