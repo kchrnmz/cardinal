@@ -119,6 +119,103 @@ describe('useAppHotkeys', () => {
     });
   });
 
+  it('opens the selected results on Enter', () => {
+    renderHotkeys();
+
+    const enterEvent = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true });
+    act(() => {
+      window.dispatchEvent(enterEvent);
+    });
+
+    expect(mockedOpenResultPath).toHaveBeenCalledTimes(2);
+    expect(mockedOpenResultPath).toHaveBeenCalledWith('/tmp/a');
+    expect(mockedOpenResultPath).toHaveBeenCalledWith('/tmp/b');
+    expect(enterEvent.defaultPrevented).toBe(true);
+
+    const repeatEvent = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      repeat: true,
+      cancelable: true,
+    });
+    act(() => {
+      window.dispatchEvent(repeatEvent);
+    });
+
+    expect(mockedOpenResultPath).toHaveBeenCalledTimes(2);
+  });
+
+  it('ignores Enter without a selection, with modifiers, or outside the files tab', () => {
+    const { rerender } = renderHotkeys({ selectedPaths: [] });
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', cancelable: true }));
+    });
+
+    rerender({
+      activeTab: 'files',
+      activeRowIndex: 1,
+      selectedPaths: ['/tmp/a'],
+      selectedIndicesRef: { current: [0] },
+      focusSearchInput,
+      focusAndSelectSearchInput,
+      clearSelection,
+      navigateSelection,
+      triggerQuickLook,
+    });
+    act(() => {
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, cancelable: true }),
+      );
+    });
+
+    rerender({
+      activeTab: 'events',
+      activeRowIndex: 1,
+      selectedPaths: ['/tmp/a'],
+      selectedIndicesRef: { current: [0] },
+      focusSearchInput,
+      focusAndSelectSearchInput,
+      clearSelection,
+      navigateSelection,
+      triggerQuickLook,
+    });
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', cancelable: true }));
+    });
+
+    expect(mockedOpenResultPath).not.toHaveBeenCalled();
+  });
+
+  it('leaves Enter to the search input and to focused buttons', () => {
+    renderHotkeys();
+
+    const input = document.createElement('input');
+    const button = document.createElement('button');
+    document.body.append(input, button);
+
+    const inputEnter = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      cancelable: true,
+      bubbles: true,
+    });
+    const buttonEnter = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      cancelable: true,
+      bubbles: true,
+    });
+    act(() => {
+      input.dispatchEvent(inputEnter);
+      button.dispatchEvent(buttonEnter);
+    });
+
+    expect(mockedOpenResultPath).not.toHaveBeenCalled();
+    expect(inputEnter.defaultPrevented).toBe(false);
+    expect(buttonEnter.defaultPrevented).toBe(false);
+
+    input.remove();
+    button.remove();
+  });
+
   it('does not override native copy shortcuts inside editable fields', () => {
     renderHotkeys();
 

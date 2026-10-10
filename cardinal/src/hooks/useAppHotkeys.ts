@@ -36,6 +36,11 @@ const isEditableTarget = (target: EventTarget | null): boolean => {
   return tagName === 'INPUT' || tagName === 'TEXTAREA' || element.isContentEditable;
 };
 
+// Controls where Enter already has a native meaning (activating the focused control).
+const isActivatableTarget = (target: EventTarget | null): boolean =>
+  target instanceof Element &&
+  target.closest('button, a[href], select, summary, [role="button"], [role="menuitem"]') !== null;
+
 export function useAppHotkeys({
   activeTab,
   activeRowIndex,
@@ -113,6 +118,18 @@ export function useAppHotkeys({
       }
       event.preventDefault();
       triggerQuickLook();
+      return true;
+    }
+
+    // Enter opens the selected results with their default apps, like Cmd+O.
+    if (event.key === 'Enter') {
+      if (hasModifierKey(event) || isActivatableTarget(target) || !selectedPaths.length) {
+        return false;
+      }
+      event.preventDefault();
+      if (!event.repeat) {
+        selectedPaths.forEach((path) => openResultPath(path));
+      }
       return true;
     }
 
