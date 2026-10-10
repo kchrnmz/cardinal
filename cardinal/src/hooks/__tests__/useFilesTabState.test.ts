@@ -27,7 +27,7 @@ type HookProps = {
       onSearchCommitted?: () => void;
     },
   ) => void;
-  onNavigateFromSearchToResults?: () => void;
+  onNavigateFromSearchToResults?: () => boolean;
 };
 
 describe('useFilesTabState', () => {
@@ -329,6 +329,70 @@ describe('useFilesTabState', () => {
     expect(navigate).not.toHaveBeenCalled();
     expect(queueSearch).not.toHaveBeenCalled();
     expect(onNavigateFromSearchToResults).not.toHaveBeenCalled();
+  });
+
+  it('moves from the search input to results on Tab', () => {
+    const onNavigateFromSearchToResults = vi.fn(() => true);
+    const { result } = renderFilesTabState({ onNavigateFromSearchToResults });
+    const preventDefault = vi.fn();
+
+    act(() => {
+      result.current.onSearchInputKeyDown({
+        key: 'Tab',
+        currentTarget: { value: 'needle' },
+        preventDefault,
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: false,
+      } as unknown as ReactKeyboardEvent<HTMLInputElement>);
+    });
+
+    expect(onNavigateFromSearchToResults).toHaveBeenCalledTimes(1);
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('keeps default Tab focus movement when there are no results', () => {
+    const onNavigateFromSearchToResults = vi.fn(() => false);
+    const { result } = renderFilesTabState({ onNavigateFromSearchToResults });
+    const preventDefault = vi.fn();
+
+    act(() => {
+      result.current.onSearchInputKeyDown({
+        key: 'Tab',
+        currentTarget: { value: 'needle' },
+        preventDefault,
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: false,
+      } as unknown as ReactKeyboardEvent<HTMLInputElement>);
+    });
+
+    expect(onNavigateFromSearchToResults).toHaveBeenCalledTimes(1);
+    expect(preventDefault).not.toHaveBeenCalled();
+  });
+
+  it('does not move into results on Shift+Tab', () => {
+    const onNavigateFromSearchToResults = vi.fn(() => true);
+    const { result } = renderFilesTabState({ onNavigateFromSearchToResults });
+    const preventDefault = vi.fn();
+
+    act(() => {
+      result.current.onSearchInputKeyDown({
+        key: 'Tab',
+        currentTarget: { value: 'needle' },
+        preventDefault,
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: true,
+      } as unknown as ReactKeyboardEvent<HTMLInputElement>);
+    });
+
+    expect(onNavigateFromSearchToResults).not.toHaveBeenCalled();
+    expect(preventDefault).not.toHaveBeenCalled();
   });
 
   it('exposes submitFilesQuery for external callers', () => {

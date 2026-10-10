@@ -15,7 +15,8 @@ type UseFilesTabStateOptions = {
   queueSearch: (query: string, options?: QueueSearchOptions) => void;
   queueDirectorySearch: (directoryQuery: string, options?: QueueSearchOptions) => void;
   maxSearchHistoryEntries?: number;
-  onNavigateFromSearchToResults?: () => void;
+  // Returns true when focus moved to the results (i.e. there was a result to select).
+  onNavigateFromSearchToResults?: () => boolean;
 };
 
 type UseFilesTabStateResult = {
@@ -105,6 +106,14 @@ export function useFilesTabState({
         return;
       }
 
+      // Plain Tab jumps to the first result; with no results it keeps its default focus move.
+      if (event.key === 'Tab') {
+        if (!hasModifierKey(event) && onNavigateFromSearchToResults?.()) {
+          event.preventDefault();
+        }
+        return;
+      }
+
       if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') {
         return;
       }
@@ -116,7 +125,7 @@ export function useFilesTabState({
       event.preventDefault();
       handleHistoryNavigation(event.key === 'ArrowUp' ? 'older' : 'newer');
     },
-    [activeTab, handleHistoryNavigation, submitFilesQuery],
+    [activeTab, handleHistoryNavigation, onNavigateFromSearchToResults, submitFilesQuery],
   );
 
   const onDirectoryInputKeyDown = useCallback(

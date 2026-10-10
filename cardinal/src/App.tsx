@@ -99,11 +99,12 @@ function App() {
 
   const navigateFromSearchToResults = useCallback(() => {
     if (displayedResults.length === 0) {
-      return;
+      return false;
     }
 
     selectSingleRow(0);
     searchInputRef.current?.blur();
+    return true;
   }, [displayedResults.length, selectSingleRow]);
 
   const {
