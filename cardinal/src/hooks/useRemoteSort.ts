@@ -2,9 +2,23 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import { invoke } from '@tauri-apps/api/core';
 import type { SortKey, SortState } from '../types/sort';
 import type { SlabIndex } from '../types/slab';
+import { useStoredState } from './useStoredState';
 
 const SORT_THRESHOLD_STORAGE_KEY = 'cardinal.sortThreshold';
+const SORT_STATE_STORAGE_KEY = 'cardinal.sortState';
+const SORT_KEYS: readonly SortKey[] = ['filename', 'fullPath', 'size', 'mtime', 'ctime'];
 export const DEFAULT_SORTABLE_RESULT_THRESHOLD = 20000;
+
+const readStoredSortState = (raw: string): SortState => {
+  const parsed: unknown = JSON.parse(raw);
+  if (!parsed || typeof parsed !== 'object') return null;
+  const { key, direction } = parsed as Record<string, unknown>;
+  if (!SORT_KEYS.includes(key as SortKey)) return null;
+  if (direction !== 'asc' && direction !== 'desc') return null;
+  return { key: key as SortKey, direction };
+};
+
+const writeStoredSortState = (value: SortState): string => JSON.stringify(value);
 
 const clampSortThreshold = (value: number): number => {
   if (!Number.isFinite(value)) {
@@ -60,7 +74,16 @@ export const useRemoteSort = (
   locale: string,
   formatDisabledTooltip: (limit: string) => string | null,
 ): RemoteSortControls => {
-  const [sortState, setSortState] = useState<SortState>(null);
+  // Persisted so the last sort survives restarts; it is paused (not cleared) while the
+  // result count is above the sort threshold.
+  const [sortState, setSortState] = useStoredState<SortState>({
+    key: SORT_STATE_STORAGE_KEY,
+    defaultValue: null,
+    read: readStoredSortState,
+    write: writeStoredSortState,
+    readErrorMessage: 'Unable to read saved sort state',
+    writeErrorMessage: 'Unable to persist sort state',
+  });
   const [sortedResults, setSortedResults] = useState<SlabIndex[]>([]);
   const [sortThreshold, setSortThresholdState] = useState<number>(() => readStoredSortThreshold());
   const [isSorting, setIsSorting] = useState(false);
@@ -86,24 +109,16 @@ export const useRemoteSort = (
       if (!canSort) {
         return;
       }
-      setSortState((prev) => {
-        if (!prev || prev.key !== nextKey) {
-          return { key: nextKey, direction: 'asc' };
-        }
-        if (prev.direction === 'asc') {
-          return { key: nextKey, direction: 'desc' };
-        }
-        return null;
-      });
+      if (!sortState || sortState.key !== nextKey) {
+        setSortState({ key: nextKey, direction: 'asc' });
+      } else if (sortState.direction === 'asc') {
+        setSortState({ key: nextKey, direction: 'desc' });
+      } else {
+        setSortState(null);
+      }
     },
-    [canSort],
+    [canSort, sortState, setSortState],
   );
-
-  useEffect(() => {
-    if (!canSort && sortState) {
-      setSortState(null);
-    }
-  }, [canSort, sortState]);
 
   useEffect(() => {
     const requestId = sortRequestRef.current + 1;

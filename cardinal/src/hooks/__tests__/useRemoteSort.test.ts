@@ -161,10 +161,11 @@ describe('useRemoteSort', () => {
     expect(mockedInvoke).not.toHaveBeenCalled();
   });
 
-  it('clears current sort state when result count exceeds threshold', async () => {
+  it('keeps sort state paused above the threshold and resumes sorting within it', async () => {
     window.localStorage.setItem('cardinal.sortThreshold', '2');
     const initial = toSlabIndices([0, 1]);
     const overLimit = toSlabIndices([0, 1, 2]);
+    const backWithin = toSlabIndices([5, 6]);
 
     const { result, rerender } = renderHook(
       ({ items, version }: { items: SlabIndex[]; version: number }) =>
@@ -192,9 +193,64 @@ describe('useRemoteSort', () => {
       });
     });
 
-    await waitFor(() => {
-      expect(result.current.sortState).toBeNull();
+    expect(result.current.sortState).toEqual({ key: 'filename', direction: 'asc' });
+    expect(result.current.canSort).toBe(false);
+    expect(result.current.displayedResults).toEqual(overLimit);
+
+    mockedInvoke.mockClear();
+    act(() => {
+      rerender({
+        items: backWithin,
+        version: 3,
+      });
     });
+
+    await waitFor(() => {
+      expect(mockedInvoke).toHaveBeenCalledWith('get_sorted_view', {
+        results: backWithin,
+        sort: { key: 'filename', direction: 'asc' },
+      });
+    });
+  });
+
+  it('persists sort state changes across mounts', async () => {
+    const results = toSlabIndices([0, 1, 2]);
+    const first = renderHook(() => useRemoteSort(results, 1, 'en-US', () => null));
+
+    act(() => {
+      first.result.current.handleSortToggle('mtime');
+    });
+    act(() => {
+      first.result.current.handleSortToggle('mtime');
+    });
+
+    await waitFor(() => {
+      expect(first.result.current.sortState).toEqual({ key: 'mtime', direction: 'desc' });
+    });
+    first.unmount();
+
+    const second = renderHook(() => useRemoteSort(results, 1, 'en-US', () => null));
+    expect(second.result.current.sortState).toEqual({ key: 'mtime', direction: 'desc' });
+    await waitFor(() => {
+      expect(mockedInvoke).toHaveBeenLastCalledWith('get_sorted_view', {
+        results,
+        sort: { key: 'mtime', direction: 'desc' },
+      });
+    });
+
+    act(() => {
+      second.result.current.handleSortToggle('mtime');
+    });
+    expect(second.result.current.sortState).toBeNull();
+    expect(window.localStorage.getItem('cardinal.sortState')).toBe('null');
+  });
+
+  it('ignores an invalid saved sort state', () => {
+    window.localStorage.setItem('cardinal.sortState', '{"key":"bogus","direction":"asc"}');
+    const results = toSlabIndices([0, 1, 2]);
+    const { result } = renderHook(() => useRemoteSort(results, 1, 'en-US', () => null));
+
+    expect(result.current.sortState).toBeNull();
   });
 
   it('bumps displayedResultsVersion when switching sorted projection on then off', async () => {
